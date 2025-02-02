@@ -1,0 +1,87 @@
+import re
+
+class PalletWeightCalculator:
+    UNIT_CONVERSION = {"mm": 0.1, "cm": 1, "m": 100, "inch": 2.54}  # Convert all to cm
+    WEIGHT_CONVERSION = {"g": 0.001, "kg": 1, "lb": 0.453592}  # Convert all to kg
+
+    def __init__(self, text):
+        """
+        Initializes the PalletWeightCalculator with input text.
+
+        :param text: The input text containing dimensions and weights.
+        """
+        self.text = text
+        self.dimensions, self.weights = self.extract_data(text)
+        self.volumetric_weight = self.calculate_volumetric_weight(self.dimensions)
+        self.gross_weight = sum(self.weights)
+
+    def extract_data(self, text):
+        """
+        Extracts dimensions (length, width, height) and weights (kg) from the input text.
+        Detects and converts units automatically.
+        """
+        # Adjusted pattern to account for dimensions with quotes like "120"x80"x70"
+        # This pattern handles cases like: 120"x80"x70", 120x80x70, 1m x 80cm x 125cm, etc.
+        pattern = r'(\d+)\s*(mm|cm|m|inch|")?\s*[x×"]\s*(\d+)\s*(mm|cm|m|inch|")?\s*[x×"]\s*(\d+)\s*(mm|cm|m|inch|")?\s*.*?(\d+)\s*(g|kg|lb)?'
+        matches = re.findall(pattern, text)
+
+        dimensions = []
+        weights = []
+
+        for match in matches:
+            length, length_unit, width, width_unit, height, height_unit, weight, weight_unit = match
+
+            # Convert dimensions to cm (handle the case where " is used for inches)
+            if length_unit == '"':
+                length_unit = 'inch'
+            if width_unit == '"':
+                width_unit = 'inch'
+            if height_unit == '"':
+                height_unit = 'inch'
+
+            length = int(length) * self.UNIT_CONVERSION.get(length_unit or "cm", 1)
+            width = int(width) * self.UNIT_CONVERSION.get(width_unit or "cm", 1)
+            height = int(height) * self.UNIT_CONVERSION.get(height_unit or "cm", 1)
+
+            # Convert weight to kg
+            weight = int(weight) * self.WEIGHT_CONVERSION.get(weight_unit or "kg", 1)
+
+            dimensions.append((length, width, height))
+            weights.append(weight)
+
+        return dimensions, weights
+
+    def calculate_volumetric_weight(self, dimensions):
+        """
+        Calculates the total volumetric weight using the formula:
+        (length * width * height) / 6000 for each set of dimensions.
+        """
+        return sum((l * w * h) / 6000 for l, w, h in dimensions)
+
+    def compare_weights(self):
+        """
+        Returns the greater value between the total gross weight and volumetric weight.
+        """
+        return max(self.gross_weight, self.volumetric_weight)
+
+    def display_results(self):
+        """
+        Displays the extracted dimensions, weights, volumetric weight, and gross weight.
+        """
+        print("Extracted Dimensions:", self.dimensions)
+        print("Extracted Weights (kg):", self.weights)
+        print(f"Total Volumetric Weight: {self.volumetric_weight:.2f} kg")
+        print(f"Total Gross Weight: {self.gross_weight} kg")
+        print(f"Chargeable Weight: {self.compare_weights():.2f} kg")
+
+
+# Example input text with inches in the format 120"x50"x70"
+text = """
+1 pallet at 120"x50"x70" 130lb (2 x Cool Collars & 2kW VCC’s)
+1 pallet at 120x80x70 @ 80kg (1 x Cool Collars & 2kW VCC)
+1 pallet at 1mm x 80mm x 125mm @ 120kg (4 x RRV3-0848-0707)
+"""
+
+# Create an instance and display results
+calculator = PalletWeightCalculator(text)
+calculator.display_results()
