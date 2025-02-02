@@ -1,117 +1,144 @@
 import re
+import tkinter as tk
+from tkinter import scrolledtext
+
 
 class PalletWeightCalculator:
+    UNIT_CONVERSION = {"mm": 0.1, "cm": 1, "m": 100, "inch": 2.54, "\"": 2.54}  # Convert all to cm
+    WEIGHT_CONVERSION = {"g": 0.001, "kg": 1, "lb": 0.453592}  # Convert all to kg
+
     def __init__(self, text):
         """
-        Initializes the PalletWeightCalculator with the input text.
-        
-        :param text: The input text containing the dimensions and weights.
+        Initializes the PalletWeightCalculator with input text.
+        :param text: The input text containing dimensions and weights.
         """
         self.text = text
-        self.dimensions = self.extract_dimensions(text)
-        self.weights = self.extract_weights(text)
-        self.volumetric_weight = self.volumetric_weight(self.dimensions)
-        self.gross_weight = self.total_gross_weight(self.weights)
+        self.dimensions, self.weights = self.extract_data(text)
+        self.volumetric_weight = self.calculate_volumetric_weight(self.dimensions)
+        self.gross_weight = sum(self.weights)
 
-    def extract_dimensions(self, text):
+    def extract_data(self, text):
         """
-        Extracts the dimensions (length, width, height) from the input text.
-        The dimensions are returned as a list of tuples (length, width, height).
-        This function also handles units (cm, mm, m) and converts them to centimeters.
+        Extracts dimensions (length, width, height) and weights (kg) from the input text.
+        Detects and converts units automatically.
         """
-        # Regular expression pattern to match dimensions with or without unit (cm, mm, m)
-        pattern = r'(\d+)\s*(mm|cm|m)?\s*(x|×)\s*(\d+)\s*(mm|cm|m)?\s*(x|×)\s*(\d+)\s*(mm|cm|m)?'
-        
-        # Find all matches
+        pattern = r'(\d+)\s*(mm|cm|m|inch|\")?\s*[x×]\s*(\d+)\s*(mm|cm|m|inch|\")?\s*[x×]\s*(\d+)\s*(mm|cm|m|inch|\")?.*?(\d+)\s*(g|kg|lb)?'
         matches = re.findall(pattern, text)
 
         dimensions = []
+        weights = []
+
         for match in matches:
-            length, length_unit, _, width, width_unit, _, height, height_unit = match
-            
-            # Convert dimensions based on unit
-            if length_unit == 'mm':
-                length = int(length) / 10  # Convert mm to cm
-            elif length_unit == 'm':
-                length = int(length) * 100  # Convert m to cm
-            else:
-                length = int(length)  # Already in cm
+            length, length_unit, width, width_unit, height, height_unit, weight, weight_unit = match
 
-            if width_unit == 'mm':
-                width = int(width) / 10  # Convert mm to cm
-            elif width_unit == 'm':
-                width = int(width) * 100  # Convert m to cm
-            else:
-                width = int(width)  # Already in cm
+            # Convert dimensions to cm
+            length = int(length) * self.UNIT_CONVERSION.get(length_unit or "cm", 1)
+            width = int(width) * self.UNIT_CONVERSION.get(width_unit or "cm", 1)
+            height = int(height) * self.UNIT_CONVERSION.get(height_unit or "cm", 1)
 
-            if height_unit == 'mm':
-                height = int(height) / 10  # Convert mm to cm
-            elif height_unit == 'm':
-                height = int(height) * 100  # Convert m to cm
-            else:
-                height = int(height)  # Already in cm
+            # Convert weight to kg
+            weight = int(weight) * self.WEIGHT_CONVERSION.get(weight_unit or "kg", 1)
 
             dimensions.append((length, width, height))
+            weights.append(weight)
 
-        return dimensions
+        return dimensions, weights
 
-    def extract_weights(self, text):
+    def calculate_volumetric_weight(self, dimensions):
         """
-        Extracts the weights (in kg) from the input text.
-        The weights are located immediately before the 'kg' string.
+        Calculates the total volumetric weight using the formula:
+        (length * width * height) / 6000 for each set of dimensions.
         """
-        pattern = r'(\d+)\s*kg'
-        matches = re.findall(pattern, text)
-        return [int(weight) for weight in matches]
-
-    def volumetric_weight(self, dimensions):
-        """
-        Calculates the volumetric weight for the given dimensions.
-        The formula used is: (length * width * height) / 6000 for each dimension.
-        The function returns the total sum of volumetric weight for all dimensions.
-        """
-        return sum((dim[0] * dim[1] * dim[2] / 6000) for dim in dimensions)
-
-    def total_gross_weight(self, weights):
-        """
-        Calculates the total gross weight from the list of weights.
-        The total gross weight is the sum of all individual weights (in kg).
-        
-        :param weights: A list of individual weights (in kg) for each pallet.
-        :return: The total gross weight (sum of all weights).
-        """
-        return sum((dim) for dim in weights)
+        return sum((l * w * h) / 6000 for l, w, h in dimensions)
 
     def compare_weights(self):
         """
-        Compares the total gross weight and volumetric weight and returns the higher value.
-        
-        :return: The higher value between gross weight and volumetric weight.
+        Returns the greater value between the total gross weight and volumetric weight.
         """
         return max(self.gross_weight, self.volumetric_weight)
 
-    def display_results(self):
+    def get_results(self):
         """
-        Displays the results for the dimensions, weights, volumetric weight, gross weight,
-        and the comparison between the two weights.
+        Returns the extracted dimensions, weights, volumetric weight, and gross weight as a string.
         """
-        print("Original Dimensions:", self.dimensions)
-        print("Weights:", self.weights)
-        print("Total Volumetric Weight:", self.volumetric_weight)
-        print("Total Gross Weight:", self.gross_weight)
-        print("Higher Weight:", self.compare_weights())
+        return (f"Extracted Dimensions: {self.dimensions}\n"
+                f"Extracted Weights (kg): {self.weights}\n"
+                f"Total Volumetric Weight: {self.volumetric_weight:.2f} kg\n"
+                f"Total Gross Weight: {self.gross_weight} kg\n"
+                f"Billable Weight: {self.compare_weights():.2f} kg")
 
-# Input text (contains dimensions and weights)
-text = """
-1 pallet at 120 x 50 x 70cm 130kg (2 x Cool Collars & 2kW VCC’s)
+
+def calculate():
+    text = input_text.get("1.0", tk.END).strip()
+    if not text:
+        result_text.set("Please enter text data.")
+        return
+
+    calculator = PalletWeightCalculator(text)
+    result_text.set(calculator.get_results())
+
+
+def paste_from_clipboard(event=None):
+    try:
+        # Get text from clipboard and insert into the input field
+        clipboard_text = root.clipboard_get()
+        input_text.delete(1.0, tk.END)  # Clear the text before inserting new content
+        input_text.insert(tk.END, clipboard_text)
+    except tk.TclError:
+        result_text.set("No text in clipboard!")
+
+
+# Create GUI
+root = tk.Tk()
+root.title("Pallet Weight Calculator")
+
+# Input field
+input_label = tk.Label(root, text="Enter text:")
+input_label.pack()
+input_text = scrolledtext.ScrolledText(root, width=90, height=20, undo=True)  # Enable undo support
+input_text.pack()
+
+# Paste button (can also be done with ctrl+v)
+paste_button = tk.Button(root, text="Paste from Clipboard", command=paste_from_clipboard)
+paste_button.pack()
+
+# Calculate button
+calculate_button = tk.Button(root, text="Calculate", command=calculate)
+calculate_button.pack()
+
+# Output field - Using Text widget for selectable text
+result_label = tk.Text(root, height=10, width=90)
+result_label.pack()
+
+# Insert the result into the Text widget
+def update_result():
+    result_label.delete(1.0, tk.END)
+    result_label.insert(tk.END, result_text.get())
+
+# Call update_result when result changes
+result_text = tk.StringVar()
+result_text.trace("w", lambda name, index, mode: update_result())
+
+# Enable Ctrl+C, Ctrl+X, Ctrl+V, and Ctrl+Z
+def bind_shortcuts():
+    root.bind("<Control-c>", lambda event: root.clipboard_clear() or root.clipboard_append(result_label.get(1.0, tk.END)))  # Copy (Ctrl+C)
+    root.bind("<Control-v>", paste_from_clipboard)  # Paste (Ctrl+V)
+    root.bind("<Control-x>", lambda event: result_label.event_generate("<<Cut>>"))  # Cut (Ctrl+X)
+    root.bind("<Control-z>", lambda event: input_text.edit_undo())  # Undo (Ctrl+Z)
+
+bind_shortcuts()
+
+# Run GUI
+root.mainloop()
+
+
+
+
+
+
+"""1 pallet at 120 x 50 x 70cm 130kg (2 x Cool Collars & 2kW VCC’s)
 1 pallet at 120x80x70 @ 80kg (1 x Cool Collars & 2kW VCC)
-1 pallet at 1m x 80cm x 125cm @ 120kg (4 x RRV3-0848-0707)
+1 pallet at 1m x 80cm x 125cm @ 120kg (4 x RRV3-0848-0707) 1 pallet at 120x80x70 @ 80kg (1 x Cool Collars & 2kW VCC)
 1 pallet at 2000mm x 1500mm x 1000mm 500kg (5 x Some Item)
-The size of the plastic box is 480 mm x 370mm x 23 mm
-"""
+The size of the plastic box is 480 mm x 370mm x 23 mm"""
 
-# Create an instance of PalletWeightCalculator
-calculator = PalletWeightCalculator(text)
-
-# Call the display_results method to output the results
-calculator.display_results()
